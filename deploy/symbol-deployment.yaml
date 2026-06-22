@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pwgen-service-char
+  name: pwgen-service-symbol
   labels:
-    app.kubernetes.io/name: pwgen-service-char
+    app.kubernetes.io/name: pwgen-service-symbol
 spec:
   # replicas is intentionally omitted: the HorizontalPodAutoscaler below owns
   # the replica count (min 2). Setting it here would fight the HPA on re-apply.
   selector:
     matchLabels:
-      app.kubernetes.io/name: pwgen-service-char
+      app.kubernetes.io/name: pwgen-service-symbol
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: pwgen-service-char
+        app.kubernetes.io/name: pwgen-service-symbol
     spec:
       # Pod-level hardening. Matches the scratch image, which runs as the
       # unprivileged numeric user 65534 (nobody) baked into the Dockerfile.
@@ -31,11 +31,11 @@ spec:
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app.kubernetes.io/name: pwgen-service-char
+              app.kubernetes.io/name: pwgen-service-symbol
       containers:
         - name: pwgen
-          # Replace with your registry/tag, e.g. ghcr.io/cudneys/pwgen-service-char:0.1.0
-          image: pwgen-service-char:latest
+          # Replace with your registry/tag, e.g. ghcr.io/cudneys/pwgen-service-symbol:0.1.0
+          image: pwgen-service-symbol:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -46,6 +46,10 @@ spec:
               value: ":8080"
             - name: LOG_LEVEL
               value: "info"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "https://lee-trace-ingest.apporto.com:443"
+            - name: PWGEN_CHARSET
+              value: "!@#$%^&*()_+=-\][{}|/.,<>?:;"
             # Uncomment to export traces to an OTEL agent/collector over OTLP/gRPC.
             # Without this, spans are written to stdout.
             # - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -91,13 +95,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: pwgen-service-char
+  name: pwgen-service-symbol
   labels:
-    app.kubernetes.io/name: pwgen-service-char
+    app.kubernetes.io/name: pwgen-service-symbol
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: pwgen-service-char
+    app.kubernetes.io/name: pwgen-service-symbol
   ports:
     - name: http
       port: 80
@@ -107,14 +111,14 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: pwgen-service-char
+  name: pwgen-service-symbol
   labels:
-    app.kubernetes.io/name: pwgen-service-char
+    app.kubernetes.io/name: pwgen-service-symbol
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: pwgen-service-char
+    name: pwgen-service-symbol
   minReplicas: 2
   maxReplicas: 10
   metrics:
