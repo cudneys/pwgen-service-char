@@ -34,8 +34,7 @@ const (
 	latencyEveryMin = 1000
 	latencyEveryMax = 3000
 	latencySleepMin = 10 * time.Millisecond
-	//latencySleepMax = 750 * time.Millisecond
-	latencySleepMax = 1.2 * time.Second
+	latencySleepMax = 1200 * time.Millisecond
 )
 
 // Handler holds the dependencies shared by the HTTP endpoints.
