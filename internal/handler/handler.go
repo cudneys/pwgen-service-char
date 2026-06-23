@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"sync"
+	"time"
 
 	"github.com/cudneys/pwgen-service-char/internal/generator"
 	"github.com/cudneys/pwgen-service-char/internal/telemetry"
@@ -25,6 +26,17 @@ const (
 	faultMax = 1000
 )
 
+// Bounds for the latency injector used by the distributed-tracing demo. Roughly
+// once every latencyEveryMin..latencyEveryMax requests, GenerateChar sleeps for
+// a random duration in [latencySleepMin, latencySleepMax] so the trace data
+// shows occasional slow spans.
+const (
+	latencyEveryMin = 1000
+	latencyEveryMax = 3000
+	latencySleepMin = 10 * time.Millisecond
+	latencySleepMax = 750 * time.Millisecond
+)
+
 // Handler holds the dependencies shared by the HTTP endpoints.
 type Handler struct {
 	gen    *generator.Generator
@@ -36,14 +48,22 @@ type Handler struct {
 	mu        sync.Mutex
 	count     int
 	threshold int
+
+	// Latency-injection state, mirroring the fault injector: every request
+	// increments latencyCount; when it reaches latencyThreshold the request
+	// sleeps for a random duration, then both are reset with a fresh threshold.
+	latencyMu        sync.Mutex
+	latencyCount     int
+	latencyThreshold int
 }
 
 // New constructs a Handler with the given generator and logger.
 func New(gen *generator.Generator, logger *slog.Logger) *Handler {
 	return &Handler{
-		gen:       gen,
-		logger:    logger,
-		threshold: nextThreshold(),
+		gen:              gen,
+		logger:           logger,
+		threshold:        nextThreshold(),
+		latencyThreshold: nextLatencyThreshold(),
 	}
 }
 
@@ -51,6 +71,12 @@ func New(gen *generator.Generator, logger *slog.Logger) *Handler {
 // which the next injected fault fires.
 func nextThreshold() int {
 	return faultMin + rand.IntN(faultMax-faultMin+1)
+}
+
+// nextLatencyThreshold picks a random request count in
+// [latencyEveryMin, latencyEveryMax] after which the next latency spike fires.
+func nextLatencyThreshold() int {
+	return latencyEveryMin + rand.IntN(latencyEveryMax-latencyEveryMin+1)
 }
 
 // shouldInjectFault advances the request counter and reports whether this
@@ -68,6 +94,25 @@ func (h *Handler) shouldInjectFault() (bool, int) {
 	h.count = 0
 	h.threshold = nextThreshold()
 	return true, 500 + rand.IntN(100)
+}
+
+// shouldInjectLatency advances the latency counter and reports whether this
+// request should be delayed. When it returns true it also returns a random
+// sleep duration in [latencySleepMin, latencySleepMax] and resets the counter
+// with a fresh threshold.
+func (h *Handler) shouldInjectLatency() (bool, time.Duration) {
+	h.latencyMu.Lock()
+	defer h.latencyMu.Unlock()
+
+	h.latencyCount++
+	if h.latencyCount < h.latencyThreshold {
+		return false, 0
+	}
+
+	h.latencyCount = 0
+	h.latencyThreshold = nextLatencyThreshold()
+	span := latencySleepMax - latencySleepMin
+	return true, latencySleepMin + time.Duration(rand.Int64N(int64(span)+1))
 }
 
 // Register mounts all routes onto the given Fiber app.
@@ -105,6 +150,20 @@ func (h *Handler) GenerateChar(c fiber.Ctx) error {
 			slog.Int("status", status),
 		)
 		return c.Status(status).JSON(fiber.Map{"error": "injected demo fault"})
+	}
+
+	// Demo latency injection: occasionally sleep so distributed traces show a
+	// few slow spans.
+	if inject, delay := h.shouldInjectLatency(); inject {
+		span.SetAttributes(
+			attribute.Bool("demo.injected_latency", true),
+			attribute.Int64("demo.injected_latency_ms", delay.Milliseconds()),
+		)
+		h.logger.InfoContext(ctx, "injected demo latency",
+			slog.String("trace_id", span.SpanContext().TraceID().String()),
+			slog.Int64("delay_ms", delay.Milliseconds()),
+		)
+		time.Sleep(delay)
 	}
 
 	char, err := h.gen.GenerateChar(ctx)
