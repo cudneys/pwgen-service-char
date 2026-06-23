@@ -35,7 +35,7 @@ spec:
       containers:
         - name: pwgen
           # Replace with your registry/tag, e.g. ghcr.io/cudneys/pwgen-service-uppercase:0.1.0
-          image: ghcr.io/cudneys/pwgen-service-char:0.0.1
+          image: ghcr.io/cudneys/pwgen-service-char:0.0.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

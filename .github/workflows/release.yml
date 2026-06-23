@@ -45,6 +45,9 @@ jobs:
         with:
           context: .
           push: true
+          # Stamp the derived version into the binary so it appears in traces.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           # Exactly one explicit tag. No metadata-action, so no extra
           # 1.2 / 1 / latest tags are ever generated.
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}

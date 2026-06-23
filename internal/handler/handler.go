@@ -30,11 +30,10 @@ func (h *Handler) Register(app *fiber.App) {
 	app.Get("/generate", h.GenerateChar)
 }
 
-// Health is a liveness probe.
+// Health is a liveness probe. It is intentionally not traced: the OTel
+// middleware skips /healthz, and starting a span here would create an
+// orphaned root span on every probe.
 func (h *Handler) Health(c fiber.Ctx) error {
-	_, span := telemetry.Tracer().Start(c.Context(), "handler.Health")
-	defer span.End()
-
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 

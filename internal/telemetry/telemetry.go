@@ -41,9 +41,11 @@ import (
 // service. It is also used as the instrumentation scope for Tracer.
 const ServiceName = "pwgen-service-char"
 
-// version is the reported service version. It can be overridden at build time
-// via -ldflags "-X .../internal/telemetry.version=<v>".
-var version = "0.1.0"
+// version is the reported service version, attached to every span via the
+// service.version resource attribute. It is stamped at build time from the git
+// tag via -ldflags "-X .../internal/telemetry.version=<v>" (see Dockerfile);
+// unstamped builds report "dev".
+var version = "dev"
 
 // Tracer returns the process-wide tracer used to instrument functions.
 //

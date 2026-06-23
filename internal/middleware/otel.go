@@ -23,6 +23,13 @@ func OTel() fiber.Handler {
 	propagator := otel.GetTextMapPropagator()
 
 	return func(c fiber.Ctx) error {
+		// Skip tracing for the health endpoint: it is hit frequently by kubelet
+		// probes and produces no useful spans, so excluding it keeps trace
+		// volume focused on real traffic.
+		if c.Path() == "/healthz" {
+			return c.Next()
+		}
+
 		// Continue any trace started upstream by extracting W3C context.
 		ctx := propagator.Extract(c.Context(), &headerCarrier{c: c})
 
