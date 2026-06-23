@@ -35,7 +35,7 @@ spec:
       containers:
         - name: pwgen
           # Replace with your registry/tag, e.g. ghcr.io/cudneys/pwgen-service-uppercase:0.1.0
-          image: pwgen-service-uppercase:latest
+          image: ghcr.io/cudneys/pwgen-service-char:0.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -48,8 +48,25 @@ spec:
               value: "info"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "https://lee-trace-ingest.apporto.com:443"
+            # Bearer token for the OTLP ingest endpoint, sourced from the
+            # "token" key of the otel-bearer-token secret.
+            - name: OTEL_EXPORTER_OTLP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: otel-bearer-token
+                  key: token
+            # Surface the pod identity to the tracer as k8s.pod.name /
+            # k8s.namespace.name resource attributes via the downward API.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: PWGEN_CHARSET
-              value: "abcdefghijklmnopqrstuvwxyz"
+              value: "ABCDEFGHIKJLMONPQRSTUVWXYZ"
           # The app comes up immediately; /healthz is a cheap liveness probe.
           startupProbe:
             httpGet:
@@ -91,7 +108,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: char
+  name: uppercase
   labels:
     app.kubernetes.io/name: pwgen-service-uppercase
 spec:

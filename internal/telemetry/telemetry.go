@@ -11,6 +11,14 @@
 //   - If OTEL_EXPORTER_OTLP_ENDPOINT (or OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) is
 //     set, traces are exported over OTLP/gRPC to that agent.
 //   - Otherwise traces are written to stdout, so spans are always observable.
+//
+// When OTEL_EXPORTER_OTLP_TOKEN is set, its value is sent as a bearer token in
+// the Authorization header of every OTLP export. In Kubernetes this is sourced
+// from the "token" key of the "otel-bearer-token" secret.
+//
+// POD_NAME and POD_NAMESPACE, when set (via the Kubernetes downward API), are
+// attached to every span as the k8s.pod.name and k8s.namespace.name resource
+// attributes.
 package telemetry
 
 import (
@@ -19,6 +27,7 @@ import (
 	"os"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
@@ -48,11 +57,14 @@ func Tracer() trace.Tracer {
 // shutdown function that flushes any buffered spans. The shutdown function is
 // safe to call exactly once during graceful termination.
 func Setup(ctx context.Context, logger *slog.Logger) (shutdown func(context.Context) error, err error) {
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName(ServiceName),
+		semconv.ServiceVersion(version),
+	}
+	attrs = append(attrs, kubernetesAttributes()...)
+
 	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(ServiceName),
-			semconv.ServiceVersion(version),
-		),
+		resource.WithAttributes(attrs...),
 		resource.WithFromEnv(),
 		resource.WithProcess(),
 		resource.WithHost(),
@@ -92,7 +104,13 @@ func Setup(ctx context.Context, logger *slog.Logger) (shutdown func(context.Cont
 // exporter and a short label describing which kind was selected.
 func newExporter(ctx context.Context) (sdktrace.SpanExporter, string, error) {
 	if otlpEndpointConfigured() {
-		exp, err := otlptracegrpc.New(ctx)
+		var opts []otlptracegrpc.Option
+		if token := os.Getenv("OTEL_EXPORTER_OTLP_TOKEN"); token != "" {
+			opts = append(opts, otlptracegrpc.WithHeaders(map[string]string{
+				"Authorization": "Bearer " + token,
+			}))
+		}
+		exp, err := otlptracegrpc.New(ctx, opts...)
 		if err != nil {
 			return nil, "", err
 		}
@@ -104,6 +122,22 @@ func newExporter(ctx context.Context) (sdktrace.SpanExporter, string, error) {
 		return nil, "", err
 	}
 	return exp, "stdout", nil
+}
+
+// kubernetesAttributes returns resource attributes describing the Kubernetes
+// pod the service runs in. They are sourced from the POD_NAME and POD_NAMESPACE
+// environment variables, which are populated from the downward API in the
+// deployment manifest. Attributes are only included when their variable is set,
+// so the service still runs cleanly outside Kubernetes.
+func kubernetesAttributes() []attribute.KeyValue {
+	var attrs []attribute.KeyValue
+	if name := os.Getenv("POD_NAME"); name != "" {
+		attrs = append(attrs, semconv.K8SPodName(name))
+	}
+	if namespace := os.Getenv("POD_NAMESPACE"); namespace != "" {
+		attrs = append(attrs, semconv.K8SNamespaceName(namespace))
+	}
+	return attrs
 }
 
 // otlpEndpointConfigured reports whether an OTLP agent endpoint has been

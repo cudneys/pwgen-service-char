@@ -35,7 +35,7 @@ spec:
       containers:
         - name: pwgen
           # Replace with your registry/tag, e.g. ghcr.io/cudneys/pwgen-service-symbol:0.1.0
-          image: pwgen-service-symbol:latest
+          image: ghcr.io/cudneys/pwgen-service-char:0.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -48,8 +48,25 @@ spec:
               value: "info"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "https://lee-trace-ingest.apporto.com:443"
+            # Bearer token for the OTLP ingest endpoint, sourced from the
+            # "token" key of the otel-bearer-token secret.
+            - name: OTEL_EXPORTER_OTLP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: otel-bearer-token
+                  key: token
+            # Surface the pod identity to the tracer as k8s.pod.name /
+            # k8s.namespace.name resource attributes via the downward API.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: PWGEN_CHARSET
-              value: "!@#$%^&*()_+=-\][{}|/.,<>?:;"
+              value: "!@#$%^&*()_+=-][{}|/.,<>?:;"
             # Uncomment to export traces to an OTEL agent/collector over OTLP/gRPC.
             # Without this, spans are written to stdout.
             # - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -95,7 +112,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: pwgen-service-symbol
+  name: symbol
   labels:
     app.kubernetes.io/name: pwgen-service-symbol
 spec:
