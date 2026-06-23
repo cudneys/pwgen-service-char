@@ -19,6 +19,10 @@
 // POD_NAME and POD_NAMESPACE, when set (via the Kubernetes downward API), are
 // attached to every span as the k8s.pod.name and k8s.namespace.name resource
 // attributes.
+//
+// OTEL_SERVICE_NAME overrides the logical service name reported for spans and
+// logs, so the same binary deployed for different character sets (lowercase,
+// uppercase, symbol, number) can report distinct names.
 package telemetry
 
 import (
@@ -37,9 +41,23 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// ServiceName is the logical name reported for every span emitted by this
-// service. It is also used as the instrumentation scope for Tracer.
-const ServiceName = "pwgen-service-char"
+// defaultServiceName is reported when OTEL_SERVICE_NAME is not set.
+const defaultServiceName = "pwgen-service-char"
+
+// ServiceName returns the logical name reported for every span and log emitted
+// by this service; it is also used as the instrumentation scope for Tracer.
+//
+// The value is read from the OTEL_SERVICE_NAME environment variable so each
+// deployment can report a distinct name (e.g. "lowercase", "uppercase",
+// "symbol", "number"), falling back to defaultServiceName when unset. This is
+// the same variable the OTel SDK reads via resource.WithFromEnv, so the span
+// resource attribute and this value always agree.
+func ServiceName() string {
+	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
+		return v
+	}
+	return defaultServiceName
+}
 
 // version is the reported service version, attached to every span via the
 // service.version resource attribute. It is stamped at build time from the git
@@ -52,7 +70,7 @@ var version = "dev"
 // It is safe to call before Setup has run: until a provider is installed the
 // returned tracer is a no-op, so instrumentation never panics.
 func Tracer() trace.Tracer {
-	return otel.Tracer(ServiceName)
+	return otel.Tracer(ServiceName())
 }
 
 // Setup installs the global TracerProvider and propagator and returns a
@@ -60,7 +78,7 @@ func Tracer() trace.Tracer {
 // safe to call exactly once during graceful termination.
 func Setup(ctx context.Context, logger *slog.Logger) (shutdown func(context.Context) error, err error) {
 	attrs := []attribute.KeyValue{
-		semconv.ServiceName(ServiceName),
+		semconv.ServiceName(ServiceName()),
 		semconv.ServiceVersion(version),
 	}
 	attrs = append(attrs, kubernetesAttributes()...)

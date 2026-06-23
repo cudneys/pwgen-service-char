@@ -53,7 +53,7 @@ func run(logger *slog.Logger) error {
 	h := handler.New(gen, logger)
 
 	app := fiber.New(fiber.Config{
-		AppName: telemetry.ServiceName,
+		AppName: telemetry.ServiceName(),
 	})
 	app.Use(middleware.OTel())
 	h.Register(app)
@@ -61,7 +61,7 @@ func run(logger *slog.Logger) error {
 	addr := getenv("PWGEN_ADDR", ":8080")
 	logger.Info("starting server",
 		slog.String("addr", addr),
-		slog.String("service", telemetry.ServiceName),
+		slog.String("service", telemetry.ServiceName()),
 	)
 
 	errCh := make(chan error, 1)
@@ -92,7 +92,7 @@ func newLogger() *slog.Logger {
 		Level: level,
 	})
 	return slog.New(handler).With(
-		slog.String("service", telemetry.ServiceName),
+		slog.String("service", telemetry.ServiceName()),
 	)
 }
 
