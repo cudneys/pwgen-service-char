@@ -13,6 +13,7 @@ import (
 	"github.com/cudneys/pwgen-service-char/internal/generator"
 	"github.com/cudneys/pwgen-service-char/internal/telemetry"
 	"github.com/gofiber/fiber/v3"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -93,6 +94,10 @@ func (h *Handler) GenerateChar(c fiber.Ctx) error {
 	// traces show a few errors.
 	if inject, status := h.shouldInjectFault(); inject {
 		err := fmt.Errorf("injected fault: HTTP %d", status)
+		span.SetAttributes(
+			attribute.Bool("demo.injected_fault", true),
+			attribute.Int("http.response.status_code", status),
+		)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		h.logger.ErrorContext(ctx, "injected demo fault",
